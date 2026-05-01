@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartCity — Garbage Collector Tracker</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <style>
+        #garbageMap {
+            width: 100%;
+            height: 440px;
+            border-radius: var(--radius-lg);
+            z-index: 0;
+        }
+
+        .leaflet-container {
+            background: #0a1929;
+            font-family: var(--font-main);
+            border-radius: var(--radius-lg);
+        }
+
+        .eta-board {
+            padding: 24px;
+            background: var(--gradient-glow);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+        }
+
+        .eta-value {
+            font-family: var(--font-display);
+            font-size: 3.2rem;
+            font-weight: 800;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.1;
+        }
+
+        .route-step {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .route-step:last-child {
+            border-bottom: none;
+        }
+
+        .route-dot {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        .schedule-card {
+            padding: 14px 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            transition: var(--transition);
+            margin-bottom: 8px;
+        }
+
+        .schedule-card:hover {
+            border-color: var(--border-glow);
+        }
+
+        .notif-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            background: rgba(0, 191, 255, 0.06);
+            border: 1px solid rgba(0, 191, 255, 0.2);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            margin-bottom: 12px;
+            transition: var(--transition);
+        }
+
+        .toggle-switch {
+            width: 44px;
+            height: 24px;
+            background: var(--border-color);
+            border-radius: 12px;
+            position: relative;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .toggle-switch.on {
+            background: var(--gradient-primary);
+        }
+
+        .toggle-knob {
+            width: 18px;
+            height: 18px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            transition: var(--transition);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .toggle-switch.on .toggle-knob {
+            left: 23px;
+        }
+
+        .live-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            margin-right: 6px;
+            animation: livePulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes livePulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1)
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(1.4)
+            }
+        }
+
+        .truck-emoji-icon {
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        /* Leaflet dark tile override */
+        .leaflet-tile {
+            filter: brightness(0.85) saturate(0.7) hue-rotate(185deg);
+        }
+
+        .no-location-msg {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 12px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-animated"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">🏙️</div>
+            <div class="logo-text">Smart<span>City</span></div>
+        </div>
+        <div class="nav-section">Navigation</div>
+        <a class="nav-item" href="user-dashboard.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-item" href="electricity.html"><span class="nav-icon">⚡</span> Electricity</a>
+        <a class="nav-item active" href="municipality.html"><span class="nav-icon">🚛</span> Municipality</a>
+        <a class="nav-item" href="water.html"><span class="nav-icon">💧</span> Water Supply</a>
+        <div class="nav-section" style="margin-top:auto">Account</div>
+        <button class="nav-item" onclick="signOut()"><span class="nav-icon">🚪</span> Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="font-size:2rem">🚛</div>
+                <div>
+                    <h1 class="page-title">Garbage Collector Tracker</h1>
+                    <p class="page-subtitle">Live GPS tracking · AI arrival prediction · Collection schedule</p>
+                </div>
+                <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                    <span class="badge badge-green" id="liveStatusBadge"><span class="live-dot"></span> Waiting for
+                        truck…</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map -->
+        <div class="glass-card p-24" style="margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                <h3 style="font-family:var(--font-display);">🚛 Live Truck Location</h3>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="font-size:0.8rem; color:var(--text-muted)" id="lastUpdated">Not yet updated</span>
+                    <span class="badge badge-blue">OpenStreetMap</span>
+                </div>
+            </div>
+            <div id="garbageMap"></div>
+            <div
+                style="margin-top:10px; font-size:0.75rem; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+                <span class="live-dot" style="width:6px;height:6px;"></span>
+                <span id="coordsDisplay">Waiting for municipality worker to share location…</span>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <!-- ETA Board -->
+            <div class="eta-board glass-card">
+                <div
+                    style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">
+                    🤖 AI Estimated Arrival</div>
+                <div class="eta-value" id="etaDisplay">—</div>
+                <div style="color:var(--text-secondary); font-size:0.88rem; margin-top:6px; margin-bottom:20px;"
+                    id="etaSubtext">Waiting for truck GPS signal…</div>
+
+                <!-- Route progress -->
+                <div style="margin-bottom:20px;">
+                    <div
+                        style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted); margin-bottom:6px;">
+                        <span>Route progress</span><span id="routeProgress">0 of 6 sectors</span></div>
+                    <div style="height:6px; background:var(--border-color); border-radius:3px; overflow:hidden;">
+                        <div id="routeBar"
+                            style="width:0%; height:100%; background:var(--gradient-primary); border-radius:3px; transition:width 1s ease;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Route steps -->
+                <div class="route-step">
+                    <div class="route-dot" style="background:rgba(0,230,118,0.2); color:var(--accent-green)">✓</div>
+                    <div>
+                        <div style="font-weight:600; font-size:0.88rem;">Sector 1 — Completed</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted)">8:00 AM · 45 houses</div>
+                    </div>
+                </div>
+                <div class="route-step">
+                    <div class="route-dot" style="background:rgba(0,230,118,0.2); color:var(--accent-green)">✓</div>
+                    <div>
+                        <div style="font-weight:600; font-size:0.88rem;">Sector 2 — Completed</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted)">9:30 AM · 52 houses</div>
+                    </div>
+                </div>
+                <div class="route-step" id="currentSectorRow">
+                    <div class="route-dot" style="background:rgba(255,214,0,0.2); color:var(--accent-yellow)">🚛</div>
+                    <div>
+                        <div style="font-weight:600; font-size:0.88rem;">Sector 3 — In Progress</div>
+                        <div style="font-size:0.75rem; color:var(--text-yellow)" id="currentSectorSub">Locating…</div>
+                    </div>
+                </div>
+                <div class="route-step">
+                    <div class="route-dot" style="background:rgba(0,191,255,0.15); color:var(--accent-blue)">⏳</div>
+                    <div>
+                        <div style="font-weight:600; font-size:0.88rem;">Sector 4 (Your Area)</div>
+                        <div style="font-size:0.75rem; color:var(--accent-blue)" id="yourAreaEta">ETA loading…</div>
+                    </div>
+                </div>
+
+                <!-- Notification toggle -->
+                <div style="margin-top:16px;">
+                    <div class="notif-toggle" onclick="toggleNotif(this)">
+                        <span style="font-size:1.1rem">🔔</span>
+                        <div style="flex:1">
+                            <div style="font-weight:600; font-size:0.88rem;">Arrival Notification</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted)">Alert when truck is 500m away</div>
+                        </div>
+                        <div class="toggle-switch" id="notifSwitch">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule -->
+            <div class="glass-card p-24">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">📅 Today's Collection Schedule</h3>
+                <div id="scheduleList">
+                    <div class="schedule-card">
+                        <span style="font-size:1.4rem">✅</span>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 1 &amp; 2</div>
+                            <div style="font-size:0.78rem; color:var(--text-muted)">8:00 AM – 9:45 AM · Done</div>
+                        </div>
+                        <span class="badge badge-green" style="margin-left:auto">Done</span>
+                    </div>
+                    <div class="schedule-card" style="border-color:rgba(255,214,0,0.3);">
+                        <span style="font-size:1.4rem">🚛</span>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 3 (Active)</div>
+                            <div style="font-size:0.78rem; color:var(--text-muted)">10:00 AM – 11:30 AM</div>
+                        </div>
+                        <span class="badge badge-yellow" style="margin-left:auto">Active</span>
+                    </div>
+                    <div class="schedule-card">
+                        <span style="font-size:1.4rem">⏳</span>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 4 <strong
+                                    style="color:var(--accent-cyan)">(Your Area)</strong></div>
+                            <div style="font-size:0.78rem; color:var(--text-muted)" id="sector4Time">ETA: calculating…
+                            </div>
+                        </div>
+                        <span class="badge badge-blue" style="margin-left:auto">Coming</span>
+                    </div>
+                    <div class="schedule-card">
+                        <span style="font-size:1.4rem">🕐</span>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 5 &amp; 6</div>
+                            <div style="font-size:0.78rem; color:var(--text-muted)">1:30 PM – 4:00 PM</div>
+                        </div>
+                        <span class="badge"
+                            style="background:var(--bg-card);border:1px solid var(--border-color);color:var(--text-muted)">Scheduled</span>
+                    </div>
+                </div>
+
+                <!-- Today's cleaning area from Supabase -->
+                <div
+                    style="margin-top:14px; padding:14px 16px; background:rgba(0,191,255,0.06); border:1px solid rgba(0,191,255,0.2); border-radius:var(--radius-md);">
+                    <div
+                        style="font-size:0.75rem; font-weight:700; color:var(--accent-blue); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">
+                        🧹 Today's Cleaning Area</div>
+                    <div style="font-weight:600; font-size:0.9rem;" id="cleaningArea">Sectors 1–4 · Main Road · Park
+                        Junction</div>
+                    <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;" id="cleaningAreaTime">Set
+                        by supervisor</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        initSupabase();
+        requireAuth(['user']);
+
+        // ─── Leaflet Map ───
+        const map = L.map('garbageMap', {
+            center: [11.0168, 76.9558], zoom: 14,
+            zoomControl: true, attributionControl: false
+        });
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        // custom truck icon
+        const truckIcon = L.divIcon({
+            html: '<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 8px rgba(0,191,255,0.7))">🚛</div>',
+            className: '', iconSize: [34, 34], iconAnchor: [17, 17]
+        });
+
+        // home marker
+        const homeIcon = L.divIcon({
+            html: '<div style="font-size:26px;line-height:1;filter:drop-shadow(0 2px 8px rgba(124,58,237,0.7))">🏠</div>',
+            className: '', iconSize: [30, 30], iconAnchor: [15, 30]
+        });
+
+        // YOUR home location — set to the centre of the map as placeholder
+        const HOME_LAT = 11.0188, HOME_LNG = 76.9650;
+        const homeMarker = L.marker([HOME_LAT, HOME_LNG], { icon: homeIcon })
+            .addTo(map)
+            .bindPopup('<b>🏠 Your Home</b><br>Collection expected in this sector');
+
+        // Truck marker (starts hidden)
+        let truckMarker = null;
+        let truckPath = null;
+        let prevLatLng = null;
+
+        function getOrCreateTruckMarker(lat, lng) {
+            if (!truckMarker) {
+                truckMarker = L.marker([lat, lng], { icon: truckIcon })
+                    .addTo(map)
+                    .bindPopup('<b>🚛 Garbage Truck GC-04</b><br>Live GPS · Updated every 10s');
+                truckPath = L.polyline([[lat, lng]], {
+                    color: '#00bfff', weight: 3, opacity: 0.6, dashArray: '8,5'
+                }).addTo(map);
+            } else {
+                // Smooth animation
+                animateMarker(truckMarker, truckMarker.getLatLng(), L.latLng(lat, lng));
+                truckPath.addLatLng([lat, lng]);
+            }
+        }
+
+        function animateMarker(marker, from, to, steps = 30) {
+            let i = 0;
+            const latStep = (to.lat - from.lat) / steps;
+            const lngStep = (to.lng - from.lng) / steps;
+            const timer = setInterval(() => {
+                i++;
+                marker.setLatLng([from.lat + latStep * i, from.lng + lngStep * i]);
+                if (i >= steps) clearInterval(timer);
+            }, 50);
+        }
+
+        // ─── ETA Calculation (Haversine) ───
+        function haversineKm(lat1, lng1, lat2, lng2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        function calcETA(lat, lng) {
+            const distKm = haversineKm(lat, lng, HOME_LAT, HOME_LNG);
+            const speedKmH = 15; // garbage truck city speed
+            const mins = Math.round((distKm / speedKmH) * 60);
+            return { mins, distKm };
+        }
+
+        function updateETADisplay(lat, lng) {
+            const { mins, distKm } = calcETA(lat, lng);
+            const etaEl = document.getElementById('etaDisplay');
+            const subEl = document.getElementById('etaSubtext');
+            const yourAreaEl = document.getElementById('yourAreaEta');
+            const secTime = document.getElementById('sector4Time');
+
+            if (mins <= 0) {
+                etaEl.textContent = 'Arrived! 🎉';
+                subEl.textContent = 'Truck is at your area now';
+                yourAreaEl.textContent = 'Truck is here!';
+                secTime.textContent = 'Arrived';
+                showToast('🚛 Garbage truck has arrived at your area!', 'success');
+            } else if (mins < 60) {
+                etaEl.textContent = `${mins} min`;
+                subEl.textContent = `${distKm.toFixed(2)} km away · Avg 15 km/h`;
+                yourAreaEl.textContent = `ETA: ~${mins} minutes`;
+                secTime.textContent = `ETA: ~${mins} min from now`;
+            } else {
+                const h = Math.floor(mins / 60), m = mins % 60;
+                etaEl.textContent = `${h}h ${m}m`;
+                subEl.textContent = `${distKm.toFixed(2)} km away`;
+                yourAreaEl.textContent = `ETA: ~${h}h ${m}m`;
+                secTime.textContent = `ETA: ~${h}h ${m}m`;
+            }
+
+            // 500m arrival notification
+            if (distKm <= 0.5 && document.getElementById('notifSwitch').classList.contains('on')) {
+                if (Notification.permission === 'granted') {
+                    new Notification('🚛 Garbage Truck Near!', { body: `Truck is ${Math.round(distKm * 1000)}m away. Get ready!` });
+                }
+            }
+        }
+
+        // ─── Supabase Real-Time Subscription ───
+        function onLocationUpdate(payload) {
+            const { lat, lng, worker_name, timestamp } = payload.new || payload;
+            if (!lat || !lng) return;
+
+            getOrCreateTruckMarker(parseFloat(lat), parseFloat(lng));
+
+            // Pan map to truck
+            map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+
+            // Update UI
+            document.getElementById('liveStatusBadge').innerHTML = `<span class="live-dot"></span> Truck GC-04 — Live`;
+            document.getElementById('coordsDisplay').textContent = `${parseFloat(lat).toFixed(5)}, ${parseFloat(lng).toFixed(5)} · Last update: ${new Date(timestamp || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+            document.getElementById('lastUpdated').textContent = 'Updated ' + new Date(timestamp || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            document.getElementById('currentSectorSub').textContent = `Live GPS · ${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
+            document.getElementById('routeBar').style.width = '50%';
+            document.getElementById('routeProgress').textContent = '3 of 6 sectors';
+
+            updateETADisplay(parseFloat(lat), parseFloat(lng));
+        }
+
+        // Subscribe to Supabase real-time
+        if (supabaseClient) {
+            // Initial fetch of last known location
+            supabaseClient
+                .from('worker_location')
+                .select('*')
+                .order('timestamp', { ascending: false })
+                .limit(1)
+                .then(({ data }) => {
+                    if (data && data.length > 0) onLocationUpdate({ new: data[0] });
+                });
+
+            // Live subscription
+            supabaseClient
+                .channel('worker_location_live')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'worker_location' }, payload => {
+                    onLocationUpdate(payload);
+                })
+                .subscribe(status => {
+                    console.log('Real-time status:', status);
+                });
+
+            // Also fetch today's schedule
+            supabaseClient
+                .from('collection_schedules')
+                .select('*')
+                .order('timestamp', { ascending: false })
+                .limit(1)
+                .then(({ data }) => {
+                    if (data && data.length > 0) {
+                        document.getElementById('cleaningArea').textContent = data[0].areas || 'Not set';
+                        document.getElementById('cleaningAreaTime').textContent = `Set by ${data[0].worker || 'supervisor'} via worker panel`;
+                    }
+                });
+        } else {
+            // Demo mode — simulate truck movement
+            let demoLat = 11.0130, demoLng = 76.9500;
+            document.getElementById('liveStatusBadge').innerHTML = '<span class="live-dot" style="background:var(--accent-yellow)"></span> Demo Mode';
+            getOrCreateTruckMarker(demoLat, demoLng);
+            updateETADisplay(demoLat, demoLng);
+
+            setInterval(() => {
+                demoLat += 0.0008;
+                demoLng += 0.0012;
+                onLocationUpdate({ new: { lat: demoLat, lng: demoLng, worker_name: 'Demo Worker', timestamp: new Date().toISOString() } });
+            }, 5000);
+        }
+
+        // Notification toggle
+        function toggleNotif(el) {
+            const sw = document.getElementById('notifSwitch');
+            sw.classList.toggle('on');
+            const isOn = sw.classList.contains('on');
+            if (isOn && 'Notification' in window) Notification.requestPermission();
+            showToast(isOn ? '🔔 Arrival notification enabled!' : '🔕 Notification disabled', isOn ? 'success' : 'info');
+        }
+
+        function showToast(msg, type = 'info') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `<span>${msg}</span>`;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4200);
+        }
+    </script>
+</body>
+
+</html>

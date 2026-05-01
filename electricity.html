@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartCity — Electricity Map</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <style>
+        #map {
+            width: 100%;
+            height: 480px;
+            border-radius: var(--radius-lg);
+            z-index: 0;
+        }
+
+        .leaflet-container {
+            background: #0a1929;
+            border-radius: var(--radius-lg);
+        }
+
+        .leaflet-tile {
+            filter: brightness(0.8) saturate(0.6) hue-rotate(190deg);
+        }
+
+        .legend {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .legend-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+        }
+
+        .zone-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .zone-table th {
+            text-align: left;
+            padding: 10px 14px;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .zone-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 0.88rem;
+        }
+
+        .zone-table tr:hover td {
+            background: var(--bg-card);
+        }
+
+        .ai-predict-card {
+            padding: 24px;
+            background: linear-gradient(135deg, rgba(0, 191, 255, 0.08), rgba(124, 58, 237, 0.08));
+            border: 1px solid rgba(0, 191, 255, 0.2);
+            border-radius: var(--radius-lg);
+        }
+
+        .predict-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: var(--border-color);
+            margin: 8px 0 4px;
+            overflow: hidden;
+        }
+
+        .predict-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: var(--gradient-primary);
+            transition: width 1s ease;
+        }
+
+        .msg-thread {
+            max-height: 220px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .msg-item {
+            padding: 12px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 0.85rem;
+        }
+
+        .msg-item .msg-author {
+            font-weight: 600;
+            color: var(--accent-blue);
+            font-size: 0.78rem;
+            margin-bottom: 4px;
+        }
+
+        .msg-item .msg-reply {
+            font-size: 0.8rem;
+            color: var(--accent-green);
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-animated"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">🏙️</div>
+            <div class="logo-text">Smart<span>City</span></div>
+        </div>
+        <div class="nav-section">Navigation</div>
+        <a class="nav-item" href="user-dashboard.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-item active" href="electricity.html"><span class="nav-icon">⚡</span> Electricity</a>
+        <a class="nav-item" href="municipality.html"><span class="nav-icon">🚛</span> Municipality</a>
+        <a class="nav-item" href="water.html"><span class="nav-icon">💧</span> Water Supply</a>
+        <div class="nav-section" style="margin-top:auto">Account</div>
+        <button class="nav-item" onclick="signOut()"><span class="nav-icon">🚪</span> Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="font-size:2rem">⚡</div>
+                <div>
+                    <h1 class="page-title">Electricity Zone Map</h1>
+                    <p class="page-subtitle">Live power status · AI outage prediction · Zone-wise tracking</p>
+                </div>
+                <div style="margin-left:auto">
+                    <span class="badge badge-green"><span class="pulse-dot pulse-green"></span> Live Feed</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-dot" style="background:#00e676; box-shadow:0 0 8px #00e676"></div> Good Supply
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:#ffd600; box-shadow:0 0 8px #ffd600"></div> Intermittent / May
+                Cut
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:#ff1744; box-shadow:0 0 8px #ff1744"></div> No Power / Outage
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="glass-card p-24 mb-24">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                <h3 style="font-family:var(--font-display);">Live Zone Map</h3>
+                <span class="badge badge-blue">OpenStreetMap · Real-time</span>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <div class="grid-2">
+            <!-- Zone Status Table -->
+            <div class="glass-card p-24">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">Zone Status</h3>
+                <table class="zone-table">
+                    <thead>
+                        <tr>
+                            <th>Zone</th>
+                            <th>Status</th>
+                            <th>Voltage</th>
+                            <th>Predicted Cut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="zoneTableBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- AI Prediction Panel -->
+            <div style="display:flex; flex-direction:column; gap:18px;">
+                <div class="ai-predict-card">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+                        <span style="font-size:1.4rem">🤖</span>
+                        <div>
+                            <div style="font-weight:700; font-family:var(--font-display);">AI Outage Predictor</div>
+                            <div style="font-size:0.78rem; color:var(--text-secondary);">Trained on load patterns &
+                                weather data</div>
+                        </div>
+                    </div>
+                    <div id="aiPredictions">
+                        <div style="margin-bottom:14px;">
+                            <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
+                                <span>Zone C — Outage Risk</span>
+                                <strong style="color:var(--accent-yellow)">72%</strong>
+                            </div>
+                            <div class="predict-bar">
+                                <div class="predict-fill"
+                                    style="width:72%; background:linear-gradient(90deg,#ffd600,#ff6d00)"></div>
+                            </div>
+                            <div style="font-size:0.72rem; color:var(--text-muted)">Likely between 8:00 PM – 10:00 PM
+                            </div>
+                        </div>
+                        <div style="margin-bottom:14px;">
+                            <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
+                                <span>Zone F — Outage Risk</span>
+                                <strong style="color:var(--accent-yellow)">55%</strong>
+                            </div>
+                            <div class="predict-bar">
+                                <div class="predict-fill"
+                                    style="width:55%; background:linear-gradient(90deg,#ffd600,#ff9800)"></div>
+                            </div>
+                            <div style="font-size:0.72rem; color:var(--text-muted)">Possible overload due to high demand
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
+                                <span>Zone A,B,E,G — Risk</span>
+                                <strong style="color:var(--accent-green)">8%</strong>
+                            </div>
+                            <div class="predict-bar">
+                                <div class="predict-fill" style="width:8%; background:var(--accent-green)"></div>
+                            </div>
+                            <div style="font-size:0.72rem; color:var(--text-muted)">Supply stable. No outage predicted.
+                            </div>
+                        </div>
+                    </div>
+                    <div
+                        style="margin-top:16px; padding:10px 14px; background:rgba(0,0,0,0.2); border-radius:var(--radius-sm); font-size:0.78rem; color:var(--text-secondary);">
+                        🤖 AI Model: Random Forest + Load Forecasting | Updated: <span id="aiUpdateTime"></span>
+                    </div>
+                </div>
+
+                <!-- Message Worker -->
+                <div class="glass-card p-24">
+                    <h3 style="font-family:var(--font-display); margin-bottom:12px; font-size:1rem;">📨 Message
+                        Electricity Dept.</h3>
+                    <div class="msg-thread" id="msgThread">
+                        <div class="msg-item">
+                            <div class="msg-author">You · 2:30 PM</div>
+                            When will power be restored in Zone D?
+                            <div class="msg-reply">⚡ Electricity Team replied: Restoration expected by 6:30 PM. Crew
+                                dispatched to Zone D transformer.</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" class="form-input" id="msgInput" placeholder="Type your query…"
+                            style="flex:1;" onkeydown="if(event.key==='Enter')sendMsg()" />
+                        <button class="btn btn-primary" onclick="sendMsg()" style="padding:0 16px;">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        initSupabase();
+        requireAuth(['user']);
+
+        // ── Zone data (synced with Supabase) ──
+        const zones = [
+            { name: 'Zone A', status: 'Good', color: 'green', voltage: '230V', nextCut: 'None predicted', lat: 11.025, lng: 76.940, w: 0.012, h: 0.007 },
+            { name: 'Zone B', status: 'Good', color: 'green', voltage: '228V', nextCut: 'None predicted', lat: 11.022, lng: 76.953, w: 0.010, h: 0.006 },
+            { name: 'Zone C', status: 'Intermittent', color: 'yellow', voltage: '210V', nextCut: '8–10 PM tonight', lat: 11.018, lng: 76.945, w: 0.011, h: 0.007 },
+            { name: 'Zone D', status: 'No Power', color: 'red', voltage: '0V', nextCut: 'Restore: 6:30 PM', lat: 11.014, lng: 76.960, w: 0.010, h: 0.006 },
+            { name: 'Zone E', status: 'Good', color: 'green', voltage: '231V', nextCut: 'None predicted', lat: 11.010, lng: 76.942, w: 0.012, h: 0.007 },
+            { name: 'Zone F', status: 'Intermittent', color: 'yellow', voltage: '215V', nextCut: 'Possible overload', lat: 11.007, lng: 76.955, w: 0.014, h: 0.007 },
+            { name: 'Zone G', status: 'Good', color: 'green', voltage: '229V', nextCut: 'None predicted', lat: 11.020, lng: 76.968, w: 0.010, h: 0.006 },
+        ];
+        const colorMap = { Good: '#00e676', Intermittent: '#ffd600', 'No Power': '#ff1744' };
+        const statusColors = { Good: 'var(--accent-green)', Intermittent: 'var(--accent-yellow)', 'No Power': 'var(--accent-red)' };
+
+        // ── Leaflet Map ──
+        const map = L.map('map', { center: [11.016, 76.955], zoom: 13 });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '' }).addTo(map);
+
+        const zoneRectangles = {};
+
+        function drawZones() {
+            zones.forEach(z => {
+                const bounds = [[z.lat, z.lng], [z.lat + z.h, z.lng + z.w]];
+                const col = colorMap[z.status];
+                if (zoneRectangles[z.name]) {
+                    zoneRectangles[z.name].setStyle({ color: col, fillColor: col });
+                } else {
+                    const rect = L.rectangle(bounds, {
+                        color: col, weight: 2, fillColor: col, fillOpacity: 0.28, dashArray: z.status === 'No Power' ? '8,4' : null
+                    }).addTo(map);
+                    rect.bindPopup(`<b>${z.name}</b><br>Status: ${z.status}<br>Voltage: ${z.voltage}<br>Next cut: ${z.nextCut}`);
+                    zoneRectangles[z.name] = rect;
+
+                    // Label
+                    L.marker([z.lat + z.h / 2, z.lng + z.w / 2], {
+                        icon: L.divIcon({
+                            html: `<div style="background:rgba(0,0,0,0.65);color:${col};padding:3px 7px;border-radius:6px;font-size:11px;font-weight:700;border:1px solid ${col};white-space:nowrap">${z.name}<br><span style='font-size:9px'>${z.status}</span></div>`,
+                            className: '', iconAnchor: [30, 16]
+                        }),
+                        interactive: false
+                    }).addTo(map);
+                }
+            });
+        }
+        drawZones();
+
+        // ── Zone table ──
+        function renderZoneTable() {
+            document.getElementById('zoneTableBody').innerHTML = zones.map(z =>
+                `<tr>
+            <td><strong>${z.name}</strong></td>
+            <td><span class="badge badge-${z.color === 'green' ? 'green' : z.color === 'yellow' ? 'yellow' : 'red'}">${z.status}</span></td>
+            <td style="color:${statusColors[z.status]}">${z.voltage}</td>
+            <td style="font-size:0.82rem;color:var(--text-muted)">${z.nextCut}</td>
+          </tr>`).join('');
+        }
+        renderZoneTable();
+        document.getElementById('aiUpdateTime').textContent = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+        // ── Supabase real-time zone_status updates ──
+        if (supabaseClient) {
+            supabaseClient.from('zone_status').select('*').then(({ data }) => {
+                if (data) data.forEach(row => updateZone(row.zone, row.status));
+            });
+            supabaseClient.channel('zone_status_live')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'zone_status' }, payload => {
+                    updateZone(payload.new.zone, payload.new.status);
+                }).subscribe();
+        }
+
+        function updateZone(name, status) {
+            const z = zones.find(x => x.name === name);
+            if (!z) return;
+            const wasStatus = z.status;
+            z.status = status;
+            z.color = status === 'Good' ? 'green' : status === 'Intermittent' ? 'yellow' : 'red';
+            drawZones();
+            renderZoneTable();
+            if (wasStatus !== status) showToast(`⚡ ${name}: ${status}`, status === 'No Power' ? 'error' : 'info');
+        }
+
+        // ── Messaging ──
+        function sendMsg() {
+            const input = document.getElementById('msgInput');
+            const text = input.value.trim();
+            if (!text) return;
+            const thread = document.getElementById('msgThread');
+            const item = document.createElement('div');
+            item.className = 'msg-item';
+            item.innerHTML = `<div class="msg-author">You · ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>${text}`;
+            thread.appendChild(item);
+            thread.scrollTop = thread.scrollHeight;
+            input.value = '';
+            dbInsert('electricity_messages', { message: text, from: 'user', timestamp: new Date().toISOString() });
+            setTimeout(() => {
+                const r = document.createElement('div');
+                r.className = 'msg-reply';
+                r.textContent = '⚡ Electricity Team: Thank you! A technician will respond shortly.';
+                item.appendChild(r);
+            }, 2000);
+        }
+
+        function showToast(msg, type = 'info') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `<span>${msg}</span>`;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4200);
+        }
+    </script>
+</body>
+
+</html>

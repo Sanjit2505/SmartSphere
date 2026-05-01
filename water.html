@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartCity — Water Supply</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <style>
+        .water-map {
+            width: 100%;
+            height: 420px;
+            position: relative;
+            background: linear-gradient(135deg, #051a2e, #071f3d);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .litre-counter {
+            font-family: var(--font-display);
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--accent-blue);
+        }
+
+        .water-wave-container {
+            position: relative;
+            height: 120px;
+            background: rgba(0, 191, 255, 0.05);
+            border: 1px solid rgba(0, 191, 255, 0.2);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .water-wave-container svg {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .pipe-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 0.88rem;
+        }
+
+        .water-stat {
+            text-align: center;
+            padding: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+        }
+
+        .water-stat-val {
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--accent-blue);
+        }
+
+        .water-stat-lbl {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .alert-card {
+            padding: 16px 20px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.88rem;
+            margin-bottom: 10px;
+        }
+
+        .alert-info {
+            background: rgba(0, 191, 255, 0.08);
+            border: 1px solid rgba(0, 191, 255, 0.25);
+        }
+
+        .alert-warn {
+            background: rgba(255, 109, 0, 0.08);
+            border: 1px solid rgba(255, 109, 0, 0.3);
+        }
+
+        .alert-danger {
+            background: rgba(255, 23, 68, 0.08);
+            border: 1px solid rgba(255, 23, 68, 0.3);
+        }
+
+        .flow-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .flow-event {
+            display: flex;
+            gap: 14px;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .flow-event:last-child {
+            border-bottom: none;
+        }
+
+        .flow-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-top: 5px;
+            flex-shrink: 0;
+        }
+
+        .flow-line {
+            position: absolute;
+            left: 4px;
+            top: 20px;
+            bottom: -14px;
+            width: 2px;
+            background: var(--border-color);
+        }
+
+        .flow-event:last-child .flow-line {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-animated"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-3"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">🏙️</div>
+            <div class="logo-text">Smart<span>City</span></div>
+        </div>
+        <div class="nav-section">Navigation</div>
+        <a class="nav-item" href="user-dashboard.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-item" href="electricity.html"><span class="nav-icon">⚡</span> Electricity</a>
+        <a class="nav-item" href="municipality.html"><span class="nav-icon">🚛</span> Municipality</a>
+        <a class="nav-item active" href="water.html"><span class="nav-icon">💧</span> Water Supply</a>
+        <div class="nav-section" style="margin-top:auto">Account</div>
+        <button class="nav-item" onclick="signOut()"><span class="nav-icon">🚪</span> Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="font-size:2rem">💧</div>
+                <div>
+                    <h1 class="page-title">Water Supply Intelligence</h1>
+                    <p class="page-subtitle">Underground pipeline visualization · Live flow tracking · AI arrival
+                        prediction</p>
+                </div>
+                <div style="margin-left:auto; display:flex; gap:8px;">
+                    <span class="badge badge-blue" id="flowBadge"><span class="pulse-dot pulse-green"></span> Water
+                        Flowing</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Water Map -->
+        <div class="glass-card p-24" style="margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+                <h3 style="font-family:var(--font-display);">Underground Pipeline — Live Flow Visualization</h3>
+                <span class="badge badge-green" id="flowStatusBadge">💧 Water Active</span>
+            </div>
+            <div class="water-map" id="waterMap">
+                <!-- Animated SVG Pipeline Map -->
+                <svg viewBox="0 0 800 400" style="width:100%; height:100%;" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Background grid -->
+                    <defs>
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(0,191,255,0.05)" stroke-width="0.5" />
+                        </pattern>
+                        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                            <path d="M0,0 L0,6 L8,3 z" fill="#00bfff" opacity="0.7" />
+                        </marker>
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                            <feMerge>
+                                <feMergeNode in="coloredBlur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <rect width="800" height="400" fill="url(#grid)" />
+
+                    <!-- Main pipes (horizontal) -->
+                    <line x1="50" y1="200" x2="750" y2="200" stroke="rgba(0,191,255,0.25)" stroke-width="14"
+                        stroke-linecap="round" />
+                    <line x1="50" y1="200" x2="750" y2="200" stroke="#00bfff" stroke-width="3" stroke-dasharray="12,6"
+                        stroke-linecap="round" filter="url(#glow)">
+                        <animate attributeName="stroke-dashoffset" values="0;-180" dur="2s" repeatCount="indefinite" />
+                    </line>
+
+                    <!-- Branch pipes -->
+                    <line x1="200" y1="200" x2="200" y2="80" stroke="rgba(0,191,255,0.2)" stroke-width="10"
+                        stroke-linecap="round" />
+                    <line x1="200" y1="200" x2="200" y2="80" stroke="#00bfff" stroke-width="2.5"
+                        stroke-dasharray="10,5">
+                        <animate attributeName="stroke-dashoffset" values="0;-150" dur="2.5s"
+                            repeatCount="indefinite" />
+                    </line>
+
+                    <line x1="400" y1="200" x2="400" y2="80" stroke="rgba(0,191,255,0.2)" stroke-width="10"
+                        stroke-linecap="round" />
+                    <line x1="400" y1="200" x2="400" y2="80" stroke="#00bfff" stroke-width="2.5"
+                        stroke-dasharray="10,5">
+                        <animate attributeName="stroke-dashoffset" values="0;-150" dur="2s" repeatCount="indefinite" />
+                    </line>
+
+                    <line x1="600" y1="200" x2="600" y2="80" stroke="rgba(0,191,255,0.2)" stroke-width="10"
+                        stroke-linecap="round" />
+                    <line x1="600" y1="200" x2="600" y2="80" stroke="#00bfff" stroke-width="2.5"
+                        stroke-dasharray="10,5">
+                        <animate attributeName="stroke-dashoffset" values="0;-150" dur="1.8s"
+                            repeatCount="indefinite" />
+                    </line>
+
+                    <!-- Lower branches -->
+                    <line x1="300" y1="200" x2="300" y2="320" stroke="rgba(0,191,255,0.2)" stroke-width="8"
+                        stroke-linecap="round" />
+                    <line x1="300" y1="200" x2="300" y2="320" stroke="#00bfff" stroke-width="2" stroke-dasharray="8,5">
+                        <animate attributeName="stroke-dashoffset" values="0;-130" dur="2.2s"
+                            repeatCount="indefinite" />
+                    </line>
+
+                    <line x1="500" y1="200" x2="500" y2="320" stroke="rgba(0,191,255,0.2)" stroke-width="8"
+                        stroke-linecap="round" />
+                    <line x1="500" y1="200" x2="500" y2="320" stroke="#00bfff" stroke-width="2" stroke-dasharray="8,5">
+                        <animate attributeName="stroke-dashoffset" values="0;-130" dur="2.4s"
+                            repeatCount="indefinite" />
+                    </line>
+
+                    <!-- Water reservoir (source) -->
+                    <rect x="10" y="170" width="50" height="60" rx="8" fill="rgba(0,191,255,0.15)" stroke="#00bfff"
+                        stroke-width="2" filter="url(#glow)" />
+                    <text x="35" y="185" fill="#00bfff" text-anchor="middle" font-size="11"
+                        font-weight="bold">PUMP</text>
+                    <text x="35" y="200" fill="#00fff2" text-anchor="middle" font-size="18">🚰</text>
+                    <text x="35" y="225" fill="#00bfff" text-anchor="middle" font-size="9">Station</text>
+
+                    <!-- Flow packet (animated water drop moving along main pipe) -->
+                    <circle r="6" fill="#00fff2" opacity="0.9" filter="url(#glow)">
+                        <animateMotion dur="4s" repeatCount="indefinite" path="M 60,200 L 740,200" />
+                    </circle>
+                    <circle r="6" fill="#00fff2" opacity="0.7" filter="url(#glow)">
+                        <animateMotion dur="4s" begin="1.3s" repeatCount="indefinite" path="M 60,200 L 740,200" />
+                    </circle>
+                    <circle r="6" fill="#00fff2" opacity="0.5" filter="url(#glow)">
+                        <animateMotion dur="4s" begin="2.6s" repeatCount="indefinite" path="M 60,200 L 740,200" />
+                    </circle>
+
+                    <!-- Branch flow drops -->
+                    <circle r="4" fill="#00bfff" opacity="0.8">
+                        <animateMotion dur="3s" repeatCount="indefinite" path="M 200,200 L 200,80" />
+                    </circle>
+                    <circle r="4" fill="#00bfff" opacity="0.8">
+                        <animateMotion dur="2.5s" begin="0.8s" repeatCount="indefinite" path="M 400,200 L 400,80" />
+                    </circle>
+                    <circle r="4" fill="#00bfff" opacity="0.8">
+                        <animateMotion dur="2.8s" begin="0.4s" repeatCount="indefinite" path="M 600,200 L 600,80" />
+                    </circle>
+
+                    <!-- House markers (pipe endpoints) -->
+                    <text x="195" y="65" font-size="24" text-anchor="middle">🏠</text>
+                    <text x="395" y="65" font-size="24" text-anchor="middle">🏘️</text>
+                    <text x="595" y="65" font-size="24" text-anchor="middle">🏠</text>
+                    <text x="295" y="340" font-size="20" text-anchor="middle">🏪</text>
+                    <text x="495" y="340" font-size="22" text-anchor="middle">🏠</text>
+
+                    <!-- Valve indicators -->
+                    <circle cx="200" cy="200" r="12" fill="#0d2040" stroke="#00bfff" stroke-width="2" />
+                    <text x="200" y="204" fill="#00bfff" text-anchor="middle" font-size="10" font-weight="bold">V</text>
+                    <circle cx="400" cy="200" r="12" fill="#0d2040" stroke="#00bfff" stroke-width="2" />
+                    <text x="400" y="204" fill="#00bfff" text-anchor="middle" font-size="10" font-weight="bold">V</text>
+                    <circle cx="600" cy="200" r="12" fill="#0d2040" stroke="#00bfff" stroke-width="2" />
+                    <text x="600" y="204" fill="#00bfff" text-anchor="middle" font-size="10" font-weight="bold">V</text>
+
+                    <!-- Your home highlight -->
+                    <circle cx="595" cy="80" r="28" fill="none" stroke="#00fff2" stroke-width="2" stroke-dasharray="5,3"
+                        opacity="0.7">
+                        <animate attributeName="r" values="25;32;25" dur="2s" repeatCount="indefinite" />
+                        <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite" />
+                    </circle>
+                    <text x="640" y="85" fill="#00fff2" font-size="10" font-weight="bold">← YOUR HOME</text>
+
+                    <!-- ETA label -->
+                    <rect x="580" y="95" width="120" height="36" rx="8" fill="rgba(0,191,255,0.12)"
+                        stroke="rgba(0,191,255,0.4)" />
+                    <text x="640" y="108" fill="#00bfff" text-anchor="middle" font-size="10">Water arrives in</text>
+                    <text x="640" y="124" fill="#00fff2" text-anchor="middle" font-size="13" font-weight="bold"
+                        id="svgEta">~2h 15min</text>
+
+                    <!-- Legend -->
+                    <rect x="10" y="355" width="360" height="30" rx="6" fill="rgba(0,0,0,0.4)" />
+                    <circle cx="25" cy="370" r="5" fill="#00fff2" />
+                    <text x="35" y="374" fill="#8ca8cc" font-size="10">Water Flow</text>
+                    <circle cx="95" cy="370" r="5" fill="#00bfff" opacity="0.4" />
+                    <text x="105" y="374" fill="#8ca8cc" font-size="10">Pipe</text>
+                    <text x="140" y="374" fill="#8ca8cc" font-size="10">V = Valve</text>
+                    <text x="180" y="374" fill="#8ca8cc" font-size="10">🏠 = Household</text>
+                </svg>
+            </div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:24px;">
+            <!-- Stats -->
+            <div class="glass-card p-24">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">Live Water Stats</h3>
+                <div class="grid-2" style="gap:12px; margin-bottom:20px;">
+                    <div class="water-stat">
+                        <div class="water-stat-val" id="litreCount">0</div>
+                        <div class="water-stat-lbl">Litres Today</div>
+                    </div>
+                    <div class="water-stat">
+                        <div class="water-stat-val" id="flowRate">4.2</div>
+                        <div class="water-stat-lbl">L/min Flow Rate</div>
+                    </div>
+                    <div class="water-stat">
+                        <div class="water-stat-val" id="pressure">2.8</div>
+                        <div class="water-stat-lbl">Bar Pressure</div>
+                    </div>
+                    <div class="water-stat">
+                        <div class="water-stat-val" id="quality">98%</div>
+                        <div class="water-stat-lbl">Water Quality</div>
+                    </div>
+                </div>
+
+                <!-- Wave meter -->
+                <div style="margin-bottom:12px;">
+                    <div
+                        style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">
+                        <span>Tank Level</span><span id="tankPct">67%</span>
+                    </div>
+                    <div class="water-wave-container">
+                        <div
+                            style="position:absolute; bottom:0; left:0; right:0; height:67%; background:linear-gradient(180deg,rgba(0,191,255,0.15),rgba(0,191,255,0.4)); border-radius:0 0 12px 12px; overflow:hidden;">
+                            <svg viewBox="0 0 400 100" preserveAspectRatio="none"
+                                style="position:absolute; top:-20px; width:100%; height:40px;">
+                                <path fill="rgba(0,191,255,0.6)"
+                                    d="M0,50 C50,20 100,80 200,50 C300,20 350,80 400,50 L400,100 L0,100 Z">
+                                    <animate attributeName="d"
+                                        values="M0,50 C50,20 100,80 200,50 C300,20 350,80 400,50 L400,100 L0,100 Z;M0,50 C50,80 100,20 200,50 C300,80 350,20 400,50 L400,100 L0,100 Z;M0,50 C50,20 100,80 200,50 C300,20 350,80 400,50 L400,100 L0,100 Z"
+                                        dur="3s" repeatCount="indefinite" />
+                                </path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Prediction -->
+                <div
+                    style="padding:14px; background:rgba(0,191,255,0.06); border:1px solid rgba(0,191,255,0.2); border-radius:var(--radius-md);">
+                    <div
+                        style="font-size:0.75rem; font-weight:700; color:var(--accent-blue); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+                        🤖 AI Water Prediction</div>
+                    <div style="font-size:0.88rem; margin-bottom:4px;">Next supply at your home: <strong
+                            style="color:var(--accent-cyan)">Tomorrow 6:00 AM</strong></div>
+                    <div style="font-size:0.88rem; margin-bottom:4px;">Duration: <strong>3 hours</strong> · Volume:
+                        ~<strong>500 litres</strong></div>
+                    <div style="font-size:0.78rem; color:var(--text-muted)">Based on pump schedule, pipeline distance &
+                        valve states</div>
+                </div>
+            </div>
+
+            <!-- Alerts & Timeline -->
+            <div class="glass-card p-24">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">⚠️ Alerts & Power Cut Impact</h3>
+
+                <div class="alert-card alert-warn" style="margin-bottom:10px;">
+                    <span style="font-size:1.3rem">⚡</span>
+                    <div><strong>Power Cut scheduled: 8–10 PM</strong><br /><span
+                            style="font-size:0.8rem; color:var(--text-muted)">Pump Station 2 will be offline. Water
+                            supply may be affected.</span></div>
+                </div>
+                <div class="alert-card alert-info" style="margin-bottom:16px;">
+                    <span style="font-size:1.3rem">💧</span>
+                    <div><strong>Water released: 6:00 AM today</strong><br /><span
+                            style="font-size:0.8rem; color:var(--text-muted)">Main pump active. Estimated reach to all
+                            homes: 8:30 AM</span></div>
+                </div>
+
+                <h4
+                    style="font-size:0.88rem; font-weight:700; color:var(--text-secondary); margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Today's Flow Timeline</h4>
+                <div class="flow-timeline">
+                    <div class="flow-event">
+                        <div class="flow-dot" style="background:var(--accent-green); margin-top:5px;"></div>
+                        <div class="flow-line" style="background:var(--accent-green); opacity:0.3;"></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">6:00 AM — Water Released</div>
+                            <div style="font-size:0.78rem; color:var(--text-muted)">Pump Station 1 activated · 120L/min
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-event">
+                        <div class="flow-dot" style="background:var(--accent-green); margin-top:5px;"></div>
+                        <div class="flow-line"></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">8:30 AM — Reached Sector 1–3</div>
+                            <div style="font-size:0.78rem; color:var(--text-muted)">2.5 km pipeline traversed</div>
+                        </div>
+                    </div>
+                    <div class="flow-event">
+                        <div class="flow-dot" style="background:var(--accent-blue); margin-top:5px;"></div>
+                        <div class="flow-line"></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Now — Flowing (Sector 4–6)</div>
+                            <div style="font-size:0.78rem; color:var(--accent-blue)">Your area active · <span
+                                    id="liveFlowTime">Live</span></div>
+                        </div>
+                    </div>
+                    <div class="flow-event">
+                        <div class="flow-dot" style="background:var(--text-muted); margin-top:5px;"></div>
+                        <div class="flow-line"></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">9:00 AM — Supply Stops</div>
+                            <div style="font-size:0.78rem; color:var(--text-muted)">Valve closure · 3-hour supply window
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-event">
+                        <div class="flow-dot" style="background:var(--accent-yellow); margin-top:5px;"></div>
+                        <div></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">8–10 PM — Power Cut ⚡</div>
+                            <div style="font-size:0.78rem; color:var(--accent-yellow)">Water pump may stop</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        initSupabase();
+        requireAuth(['user']);
+
+        // Litre counter animation
+        let litres = 0;
+        const targetLitres = 342;
+        const litreTimer = setInterval(() => {
+            litres = Math.min(litres + Math.random() * 3, targetLitres);
+            document.getElementById('litreCount').textContent = Math.floor(litres);
+            if (litres >= targetLitres) clearInterval(litreTimer);
+        }, 80);
+
+        // Live time
+        function updateLiveTime() {
+            document.getElementById('liveFlowTime').textContent = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        updateLiveTime(); setInterval(updateLiveTime, 1000);
+
+        // Flow rate fluctuation
+        setInterval(() => {
+            const rate = (4.0 + Math.random() * 0.6).toFixed(1);
+            document.getElementById('flowRate').textContent = rate;
+            const pressure = (2.6 + Math.random() * 0.5).toFixed(1);
+            document.getElementById('pressure').textContent = pressure;
+        }, 5000);
+
+        // Subscribe to water manager updates
+        subscribeToTable?.('water_status', (payload) => {
+            if (payload.new?.is_flowing === false) {
+                document.getElementById('flowBadge').innerHTML = '<span class="pulse-dot pulse-red"></span> Water Stopped';
+                document.getElementById('flowStatusBadge').textContent = '⛔ Supply Off';
+            }
+        });
+    </script>
+</body>
+
+</html>

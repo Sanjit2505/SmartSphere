@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartCity Portal — Login</title>
+  <meta name="description" content="Smart City Management Portal — Unified login for citizens, electricity managers, municipality workers and water management." />
+  <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/login.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/supabase.js"></script>
+</head>
+<body>
+  <!-- Animated Background -->
+  <div class="bg-animated"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <div class="login-wrapper">
+    <!-- Left Panel — Branding -->
+    <div class="login-left">
+      <div class="login-brand">
+        <div class="brand-logo">
+          <span class="brand-logo-icon">🏙️</span>
+        </div>
+        <h1 class="brand-name">Smart<span>City</span></h1>
+        <p class="brand-tagline">Unified Civic Management Platform</p>
+      </div>
+
+      <div class="feature-list">
+        <div class="feature-item">
+          <div class="feature-icon" style="background: rgba(0,230,118,0.15); color: #00e676;">⚡</div>
+          <div>
+            <div class="feature-title">Live Electricity Tracking</div>
+            <div class="feature-desc">AI-powered outage prediction & zone status</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon" style="background: rgba(0,191,255,0.15); color: #00bfff;">🚛</div>
+          <div>
+            <div class="feature-title">Garbage Collection Live</div>
+            <div class="feature-desc">Real-time truck tracking with ETA prediction</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon" style="background: rgba(124,58,237,0.15); color: #a78bfa;">💧</div>
+          <div>
+            <div class="feature-title">Water Supply Intelligence</div>
+            <div class="feature-desc">Underground flow visualization & litre tracking</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon" style="background: rgba(255,109,0,0.15); color: #ff9800;">🤖</div>
+          <div>
+            <div class="feature-title">AI Voice Assistant</div>
+            <div class="feature-desc">Talk to your smart city — powered by ElevenLabs</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="login-stats">
+        <div class="login-stat">
+          <div class="login-stat-value">3</div>
+          <div class="login-stat-label">AI Models</div>
+        </div>
+        <div class="login-stat">
+          <div class="login-stat-value">4</div>
+          <div class="login-stat-label">Live Maps</div>
+        </div>
+        <div class="login-stat">
+          <div class="login-stat-value">24/7</div>
+          <div class="login-stat-label">Monitoring</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel — Login Form -->
+    <div class="login-right">
+      <div class="login-card glass-card">
+        <div class="login-header">
+          <h2 class="login-title">Welcome Back</h2>
+          <p class="login-subtitle">Select your portal and sign in</p>
+        </div>
+
+        <!-- Role Selector -->
+        <div class="role-grid" id="roleGrid">
+          <button class="role-btn active" data-role="user" id="role-user" onclick="selectRole('user')">
+            <div class="role-icon">👤</div>
+            <div class="role-name">Citizen</div>
+            <div class="role-desc">Public user</div>
+            <div class="role-check">✓</div>
+          </button>
+          <button class="role-btn" data-role="electricity" id="role-electricity" onclick="selectRole('electricity')">
+            <div class="role-icon">⚡</div>
+            <div class="role-name">Electricity</div>
+            <div class="role-desc">Manager / Worker</div>
+            <div class="role-check">✓</div>
+          </button>
+          <button class="role-btn" data-role="municipality" id="role-municipality" onclick="selectRole('municipality')">
+            <div class="role-icon">🏛️</div>
+            <div class="role-name">Municipality</div>
+            <div class="role-desc">Civic manager</div>
+            <div class="role-check">✓</div>
+          </button>
+          <button class="role-btn" data-role="water" id="role-water" onclick="selectRole('water')">
+            <div class="role-icon">💧</div>
+            <div class="role-name">Water Mgmt</div>
+            <div class="role-desc">Water board</div>
+            <div class="role-check">✓</div>
+          </button>
+        </div>
+
+        <!-- Login Form -->
+        <form class="login-form" id="loginForm" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <div class="form-input-icon">
+              <span class="input-icon">✉️</span>
+              <input
+                type="email"
+                class="form-input"
+                id="emailInput"
+                placeholder="Enter your email"
+                autocomplete="email"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <div class="form-input-icon">
+              <span class="input-icon">🔒</span>
+              <input
+                type="password"
+                class="form-input"
+                id="passwordInput"
+                placeholder="Enter your password"
+                autocomplete="current-password"
+                required
+              />
+              <button type="button" class="toggle-password" onclick="togglePassword()" id="togglePwdBtn" title="Show/Hide password">👁️</button>
+            </div>
+          </div>
+
+          <div class="form-extras">
+            <label class="remember-me">
+              <input type="checkbox" id="rememberMe" />
+              <span class="checkbox-custom"></span>
+              <span>Remember me</span>
+            </label>
+            <a href="#" class="forgot-link" onclick="showForgot(event)">Forgot password?</a>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-full login-btn" id="loginBtn">
+            <span id="loginBtnText">Sign In</span>
+            <div class="loader" id="loginLoader" style="display:none; width:20px; height:20px; border-width:2px;"></div>
+          </button>
+        </form>
+
+        <!-- Demo Accounts -->
+        <div class="demo-section">
+          <div class="demo-divider"><span>Demo Accounts</span></div>
+          <div class="demo-pills">
+            <button class="demo-pill" onclick="fillDemo('user@city.com','demo123','user')">👤 Citizen</button>
+            <button class="demo-pill" onclick="fillDemo('electricity@city.com','demo123','electricity')">⚡ Electricity</button>
+            <button class="demo-pill" onclick="fillDemo('municipality@city.com','demo123','municipality')">🏛️ Municipality</button>
+            <button class="demo-pill" onclick="fillDemo('water@city.com','demo123','water')">💧 Water</button>
+          </div>
+        </div>
+
+        <!-- Role hint -->
+        <div class="role-hint" id="roleHint">
+          <span class="role-hint-icon">ℹ️</span>
+          <span id="roleHintText">Signing in as: <strong>Citizen</strong> — Access your smart city dashboard</span>
+        </div>
+      </div>
+
+      <!-- Version tag -->
+      <div class="login-footer">
+        <span>SmartCity Portal v1.0</span>
+        <span>•</span>
+        <span>Powered by Supabase + ElevenLabs AI</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Init ──
+    initSupabase();
+    let selectedRole = 'user';
+
+    // Auto redirect if already logged in
+    const existingUser = getCurrentUser();
+    if (existingUser) redirect(existingUser.role);
+
+    // ── Role Selection ──
+    const roleHints = {
+      user: 'Signing in as: <strong>Citizen</strong> — Access your smart city dashboard, AI assistant & live maps',
+      electricity: 'Signing in as: <strong>Electricity Manager</strong> — Manage power zones, log outages & respond to citizens',
+      municipality: 'Signing in as: <strong>Municipality Worker</strong> — Share live location, set cleaning zones',
+      water: 'Signing in as: <strong>Water Manager</strong> — Control water release, track pipeline flow'
+    };
+
+    function selectRole(role) {
+      selectedRole = role;
+      document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('role-' + role).classList.add('active');
+      document.getElementById('roleHintText').innerHTML = roleHints[role];
+
+      // Animate hint
+      const hint = document.getElementById('roleHint');
+      hint.classList.add('flash');
+      setTimeout(() => hint.classList.remove('flash'), 400);
+    }
+
+    // ── Fill Demo ──
+    function fillDemo(email, password, role) {
+      document.getElementById('emailInput').value = email;
+      document.getElementById('passwordInput').value = password;
+      selectRole(role);
+      // Shake animation on form
+      document.getElementById('loginForm').classList.add('shake');
+      setTimeout(() => document.getElementById('loginForm').classList.remove('shake'), 500);
+    }
+
+    // ── Toggle Password ──
+    function togglePassword() {
+      const input = document.getElementById('passwordInput');
+      const btn = document.getElementById('togglePwdBtn');
+      if (input.type === 'password') {
+        input.type = 'text'; btn.textContent = '🙈';
+      } else {
+        input.type = 'password'; btn.textContent = '👁️';
+      }
+    }
+
+    // ── Handle Login ──
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('emailInput').value.trim();
+      const password = document.getElementById('passwordInput').value;
+      const btn = document.getElementById('loginBtn');
+      const btnText = document.getElementById('loginBtnText');
+      const loader = document.getElementById('loginLoader');
+
+      btnText.style.display = 'none';
+      loader.style.display = 'block';
+      btn.disabled = true;
+
+      const { data, error } = await signIn(email, password);
+
+      if (error) {
+        btnText.style.display = 'block';
+        loader.style.display = 'none';
+        btn.disabled = false;
+        showToast('❌ ' + error.message, 'error');
+        document.getElementById('loginForm').classList.add('shake');
+        setTimeout(() => document.getElementById('loginForm').classList.remove('shake'), 500);
+        return;
+      }
+
+      showToast('✅ Welcome back! Redirecting…', 'success');
+      const user = getCurrentUser();
+      setTimeout(() => redirect(user?.role || selectedRole), 1200);
+    }
+
+    // ── Redirect by role ──
+    function redirect(role) {
+      const destinations = {
+        user: 'user-dashboard.html',
+        electricity: 'electricity-worker.html',
+        municipality: 'municipality-worker.html',
+        water: 'water-manager.html'
+      };
+      window.location.href = destinations[role] || 'user-dashboard.html';
+    }
+
+    // ── Forgot Password ──
+    function showForgot(e) {
+      e.preventDefault();
+      showToast('📧 Password reset link sent to your email (demo mode)', 'info');
+    }
+
+    // ── Toast ──
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `<span>${msg}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4200);
+    }
+
+    // ── Particle effect on logo ──
+    document.querySelector('.brand-logo').addEventListener('click', () => {
+      const orbs = ['orb-1','orb-2','orb-3'];
+      orbs.forEach(id => {
+        const el = document.querySelector('.' + id);
+        el.style.transition = 'all 0.5s ease';
+        el.style.transform = 'scale(1.5)';
+        setTimeout(() => el.style.transform = '', 800);
+      });
+    });
+  </script>
+</body>
+</html>

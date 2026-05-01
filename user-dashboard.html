@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartCity — Citizen Dashboard</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <style>
+        .profile-hero {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding: 32px;
+            background: var(--gradient-glow);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            margin-bottom: 28px;
+        }
+
+        .avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            box-shadow: 0 0 30px rgba(0, 191, 255, 0.4);
+            flex-shrink: 0;
+        }
+
+        .profile-info h2 {
+            font-family: var(--font-display);
+            font-size: 1.6rem;
+            font-weight: 700;
+        }
+
+        .profile-info p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        .profile-badges {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            margin-bottom: 28px;
+        }
+
+        .status-mini {
+            padding: 20px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border);
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            transition: var(--transition);
+            cursor: pointer;
+        }
+
+        .status-mini:hover {
+            border-color: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        .status-mini-icon {
+            font-size: 1.8rem;
+        }
+
+        .status-mini-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .status-mini-val {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        .assistant-container {
+            padding: 28px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--glass-border);
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .chat-messages {
+            height: 320px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            margin-bottom: 16px;
+            padding-right: 4px;
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input-row .form-input {
+            flex: 1;
+        }
+
+        .mic-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 4px 20px rgba(0, 191, 255, 0.3);
+            flex-shrink: 0;
+        }
+
+        .mic-btn.listening {
+            animation: micPulse 1s ease-in-out infinite;
+            box-shadow: 0 0 0 0 rgba(0, 191, 255, 0.4);
+        }
+
+        @keyframes micPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 191, 255, 0.5)
+            }
+
+            50% {
+                box-shadow: 0 0 0 16px rgba(0, 191, 255, 0)
+            }
+        }
+
+        .voice-wave {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            height: 24px;
+        }
+
+        .wave-bar {
+            width: 3px;
+            background: var(--accent-blue);
+            border-radius: 3px;
+            animation: wave 1s ease-in-out infinite;
+        }
+
+        .wave-bar:nth-child(2) {
+            animation-delay: 0.15s
+        }
+
+        .wave-bar:nth-child(3) {
+            animation-delay: 0.3s
+        }
+
+        .wave-bar:nth-child(4) {
+            animation-delay: 0.45s
+        }
+
+        .wave-bar:nth-child(5) {
+            animation-delay: 0.6s
+        }
+
+        @keyframes wave {
+
+            0%,
+            100% {
+                height: 6px
+            }
+
+            50% {
+                height: 24px
+            }
+        }
+
+        .nav-quick {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .quick-card {
+            padding: 24px 20px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--glass-border);
+            background: var(--bg-card);
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+            display: block;
+        }
+
+        .quick-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-glow);
+            border-color: var(--border-glow);
+        }
+
+        .quick-card-icon {
+            font-size: 2.4rem;
+            margin-bottom: 10px;
+        }
+
+        .quick-card-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .quick-card-desc {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .ai-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-blue);
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-animated"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">🏙️</div>
+            <div class="logo-text">Smart<span>City</span></div>
+        </div>
+        <div class="nav-section">Navigation</div>
+        <a class="nav-item active" href="user-dashboard.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-item" href="electricity.html"><span class="nav-icon">⚡</span> Electricity</a>
+        <a class="nav-item" href="municipality.html"><span class="nav-icon">🚛</span> Municipality</a>
+        <a class="nav-item" href="water.html"><span class="nav-icon">💧</span> Water Supply</a>
+        <div class="nav-section" style="margin-top:auto">Account</div>
+        <button class="nav-item" onclick="signOut()"><span class="nav-icon">🚪</span> Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <!-- Profile Hero -->
+        <div class="profile-hero glass-card">
+            <div class="avatar" id="avatarEl">👤</div>
+            <div class="profile-info">
+                <h2 id="userName">Loading...</h2>
+                <p id="userEmail">—</p>
+                <div class="profile-badges">
+                    <span class="badge badge-blue"><span class="pulse-dot pulse-green"></span> Citizen</span>
+                    <span class="badge badge-green">✓ Verified</span>
+                </div>
+            </div>
+            <div style="margin-left:auto; text-align:right;">
+                <div style="font-size:0.8rem; color:var(--text-muted);">Last login</div>
+                <div style="font-weight:600; font-size:0.9rem;" id="lastLogin">Just now</div>
+                <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;" id="timeNow">—</div>
+            </div>
+        </div>
+
+        <!-- Quick Navigation -->
+        <div class="nav-quick">
+            <a class="quick-card" href="electricity.html">
+                <div class="quick-card-icon">⚡</div>
+                <div class="quick-card-title">Electricity</div>
+                <div class="quick-card-desc">Zone status & outage prediction</div>
+            </a>
+            <a class="quick-card" href="municipality.html">
+                <div class="quick-card-icon">🚛</div>
+                <div class="quick-card-title">Garbage Collector</div>
+                <div class="quick-card-desc">Live truck tracking & ETA</div>
+            </a>
+            <a class="quick-card" href="water.html">
+                <div class="quick-card-icon">💧</div>
+                <div class="quick-card-title">Water Supply</div>
+                <div class="quick-card-desc">Pipeline flow & litre meter</div>
+            </a>
+        </div>
+
+        <!-- Live Status Strip -->
+        <div class="status-grid">
+            <div class="status-mini" onclick="location.href='electricity.html'">
+                <div class="status-mini-icon">⚡</div>
+                <div>
+                    <div class="status-mini-label">Electricity</div>
+                    <div class="status-mini-val" style="color:var(--accent-green)">🟢 Active</div>
+                </div>
+                <span class="badge badge-green" style="margin-left:auto">Good</span>
+            </div>
+            <div class="status-mini" onclick="location.href='municipality.html'">
+                <div class="status-mini-icon">🚛</div>
+                <div>
+                    <div class="status-mini-label">Garbage Truck</div>
+                    <div class="status-mini-val" id="truckEta" style="color:var(--accent-yellow)">ETA ~18 min</div>
+                </div>
+                <span class="badge badge-yellow" style="margin-left:auto">En Route</span>
+            </div>
+            <div class="status-mini" onclick="location.href='water.html'">
+                <div class="status-mini-icon">💧</div>
+                <div>
+                    <div class="status-mini-label">Water Supply</div>
+                    <div class="status-mini-val" id="waterStatus" style="color:var(--accent-blue)">Flowing</div>
+                </div>
+                <span class="badge badge-blue" style="margin-left:auto">Live</span>
+            </div>
+        </div>
+
+        <!-- AI Assistant -->
+        <div class="assistant-container">
+            <div class="ai-label">🤖 AI Voice Assistant — SmartCity AI</div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+                <h3 style="font-family:var(--font-display); font-size:1.2rem;">Ask me anything about your city</h3>
+                <div class="voice-wave" id="voiceWave" style="display:none">
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="font-size:1.4rem;">🤖</div>
+                    <div class="chat-bubble ai">
+                        <strong>SmartCity AI</strong><br />
+                        Hello! I'm your Smart City AI Assistant. Ask me about electricity outages, water supply, garbage
+                        collection timings, or anything about your city. You can also click the 🎤 mic to talk to me!
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-row">
+                <input type="text" class="form-input" id="chatInput"
+                    placeholder="Ask about electricity, water, garbage collection..."
+                    onkeydown="if(event.key==='Enter') sendChat()" />
+                <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="Voice input">🎤</button>
+                <button class="btn btn-primary" onclick="sendChat()" style="height:52px; padding:0 20px;">Send</button>
+            </div>
+            <div
+                style="font-size:0.75rem; color:var(--text-muted); margin-top:8px; display:flex; align-items:center; gap:6px;">
+                <span id="voiceStatus">🔈 Voice output: Enabled (ElevenLabs)</span>
+                <span>•</span>
+                <span>🎤 Click mic to speak</span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        initSupabase();
+        const user = requireAuth(['user']);
+
+        // Load user info
+        if (user) {
+            document.getElementById('userName').textContent = user.name || user.email;
+            document.getElementById('userEmail').textContent = user.email;
+            const initials = (user.name || 'U').charAt(0).toUpperCase();
+            document.getElementById('avatarEl').textContent = initials;
+        }
+
+        // Time display
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('timeNow').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ' • ' + now.toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' });
+        }
+        updateTime(); setInterval(updateTime, 30000);
+
+        // Simulate dynamic ETA
+        let etaMin = 18;
+        setInterval(() => {
+            etaMin = Math.max(1, etaMin - 1);
+            document.getElementById('truckEta').textContent = `ETA ~${etaMin} min`;
+        }, 60000);
+
+        // ── Chat ──
+        const AI_RESPONSES = {
+            electricity: ["Your area (Zone B) currently has stable power supply. No outages predicted in the next 4 hours. ⚡", "Based on the AI prediction model, there's a 12% chance of outage tonight between 9–11 PM due to high load. ⚡"],
+            water: ["Water supply is flowing in your pipeline. Expected to reach your area in about 2 hours with 450L capacity. 💧", "Next water supply: Tomorrow 6:00 AM. Duration: 3 hours. Estimated volume: 500 litres. 💧"],
+            garbage: ["The garbage truck is currently 2.3 km from your street. ETA: 18 minutes. 🚛", "Today's collection route includes your sector. Truck #GC-04 is currently at Sector 7. 🚛"],
+            default: ["I can help with electricity, water, garbage collection, and other city services. What would you like to know?", "SmartCity AI is here to help! Ask me about power cuts, water timings, garbage collection, or city updates."]
+        };
+
+        function addMessage(text, isUser = false, isAI = false) {
+            const container = document.getElementById('chatMessages');
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = `display:flex; align-items:flex-start; gap:10px; ${isUser ? 'flex-direction:row-reverse;' : ''}`;
+            const icon = document.createElement('div');
+            icon.style.fontSize = '1.4rem';
+            icon.textContent = isUser ? '👤' : '🤖';
+            const bubble = document.createElement('div');
+            bubble.className = `chat-bubble ${isUser ? 'user' : 'ai'}`;
+            bubble.innerHTML = isUser ? text : `<strong>SmartCity AI</strong><br/>${text}`;
+            wrapper.appendChild(icon);
+            wrapper.appendChild(bubble);
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addTyping() {
+            const container = document.getElementById('chatMessages');
+            const el = document.createElement('div');
+            el.id = 'typingEl';
+            el.style.cssText = 'display:flex; align-items:center; gap:10px;';
+            el.innerHTML = `<div style="font-size:1.4rem">🤖</div><div class="chat-bubble ai" style="display:flex; gap:6px; align-items:center; padding:12px 16px;">
+        <div style="display:flex;gap:4px" id="typingDots">
+          <div style="width:7px;height:7px;border-radius:50%;background:var(--accent-blue);animation:wave 1s .0s infinite"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:var(--accent-blue);animation:wave 1s .2s infinite"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:var(--accent-blue);animation:wave 1s .4s infinite"></div>
+        </div>
+        <span style="font-size:0.8rem;color:var(--text-muted)">SmartCity AI is thinking…</span>
+      </div>`;
+            container.appendChild(el);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            addMessage(text, true);
+            addTyping();
+
+            // Choose response
+            await new Promise(r => setTimeout(r, 1400));
+            document.getElementById('typingEl')?.remove();
+
+            const lc = text.toLowerCase();
+            let responses = AI_RESPONSES.default;
+            if (lc.includes('electric') || lc.includes('power') || lc.includes('light') || lc.includes('current')) responses = AI_RESPONSES.electricity;
+            else if (lc.includes('water') || lc.includes('litre') || lc.includes('supply')) responses = AI_RESPONSES.water;
+            else if (lc.includes('garbage') || lc.includes('trash') || lc.includes('truck') || lc.includes('collection')) responses = AI_RESPONSES.garbage;
+
+            const resp = responses[Math.floor(Math.random() * responses.length)];
+            addMessage(resp);
+            speakElevenLabs(resp);
+        }
+
+        // ── ElevenLabs TTS ──
+        async function speakElevenLabs(text) {
+            if (CONFIG.ELEVENLABS_API_KEY === 'YOUR_ELEVENLABS_API_KEY') {
+                console.log('[Demo TTS]', text); return;
+            }
+            try {
+                const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${CONFIG.ELEVENLABS_VOICE_ID}`, {
+                    method: 'POST',
+                    headers: { 'xi-api-key': CONFIG.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, model_id: 'eleven_monolingual_v1', voice_settings: { stability: 0.5, similarity_boost: 0.8 } })
+                });
+                const blob = await res.blob();
+                const audio = new Audio(URL.createObjectURL(blob));
+                audio.play();
+            } catch (e) { console.warn('ElevenLabs TTS error:', e); }
+        }
+
+        // ── Voice Input (mic) ──
+        let recognition = null;
+        let isListening = false;
+
+        function toggleMic() {
+            if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+                showToast('Speech recognition not supported in this browser', 'error'); return;
+            }
+            if (isListening) { recognition?.stop(); return; }
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SR();
+            recognition.lang = 'en-IN';
+            recognition.interimResults = false;
+            recognition.onstart = () => {
+                isListening = true;
+                document.getElementById('micBtn').classList.add('listening');
+                document.getElementById('micBtn').textContent = '🔴';
+                document.getElementById('voiceWave').style.display = 'flex';
+            };
+            recognition.onresult = (e) => {
+                document.getElementById('chatInput').value = e.results[0][0].transcript;
+                sendChat();
+            };
+            recognition.onend = () => {
+                isListening = false;
+                document.getElementById('micBtn').classList.remove('listening');
+                document.getElementById('micBtn').textContent = '🎤';
+                document.getElementById('voiceWave').style.display = 'none';
+            };
+            recognition.start();
+        }
+
+        function showToast(msg, type = 'info') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `<span>${msg}</span>`;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4200);
+        }
+    </script>
+</body>
+
+</html>

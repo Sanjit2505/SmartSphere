@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartCity — Water Manager Dashboard</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <style>
+        .pump-toggle-card {
+            padding: 28px;
+            text-align: center;
+            border-radius: var(--radius-xl);
+            border: 2px solid var(--glass-border);
+            background: var(--gradient-glow);
+        }
+
+        .pump-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 2.5rem;
+            transition: var(--transition);
+            position: relative;
+            box-shadow: 0 0 40px rgba(0, 191, 255, 0.2);
+        }
+
+        .pump-btn.on {
+            background: radial-gradient(circle, #00bfff, #0066cc);
+            box-shadow: 0 0 60px rgba(0, 191, 255, 0.5);
+            animation: pumpGlow 2s ease-in-out infinite;
+        }
+
+        .pump-btn.off {
+            background: radial-gradient(circle, #1a3055, #0d2040);
+        }
+
+        @keyframes pumpGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 40px rgba(0, 191, 255, 0.4)
+            }
+
+            50% {
+                box-shadow: 0 0 80px rgba(0, 191, 255, 0.7)
+            }
+        }
+
+        .valve-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .valve-card {
+            padding: 18px;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
+            border-radius: var(--radius-md);
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .valve-card:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .valve-card.open {
+            border-color: rgba(0, 230, 118, 0.5);
+            background: rgba(0, 230, 118, 0.06);
+        }
+
+        .valve-card.closed {
+            border-color: rgba(255, 23, 68, 0.4);
+            background: rgba(255, 23, 68, 0.06);
+        }
+
+        .valve-icon {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+
+        .valve-name {
+            font-weight: 700;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+
+        .valve-status {
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 12px;
+            padding: 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+        }
+
+        .flow-meter {
+            height: 200px;
+            background: linear-gradient(135deg, #051a2e, #071f3d);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .pressure-gauge {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 8px solid rgba(0, 191, 255, 0.15);
+            position: relative;
+            margin: 0 auto;
+        }
+
+        .gauge-value {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .release-schedule-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        select.reason-select {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            padding: 14px 18px;
+            font-family: var(--font-main);
+            font-size: 0.95rem;
+            width: 100%;
+            outline: none;
+        }
+
+        select.reason-select:focus {
+            border-color: var(--accent-blue);
+        }
+
+        select.reason-select option {
+            background: #07152e;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-animated"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-3"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">💧</div>
+            <div class="logo-text">Water<span>Panel</span></div>
+        </div>
+        <div class="nav-section">Manager Panel</div>
+        <a class="nav-item active" href="water-manager.html"><span class="nav-icon">📋</span> Dashboard</a>
+        <a class="nav-item" href="#pumpSection"
+            onclick="document.getElementById('pumpSection').scrollIntoView({behavior:'smooth'})"><span
+                class="nav-icon">🚰</span> Pump Control</a>
+        <a class="nav-item" href="#valveSection"
+            onclick="document.getElementById('valveSection').scrollIntoView({behavior:'smooth'})"><span
+                class="nav-icon">🔧</span> Valve Control</a>
+        <a class="nav-item" href="#logSection"
+            onclick="document.getElementById('logSection').scrollIntoView({behavior:'smooth'})"><span
+                class="nav-icon">📊</span> Release Logs</a>
+        <div class="nav-section" style="margin-top:auto">Account</div>
+        <button class="nav-item" onclick="signOut()"><span class="nav-icon">🚪</span> Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="font-size:2rem">💧</div>
+                <div>
+                    <h1 class="page-title">Water Manager Dashboard</h1>
+                    <p class="page-subtitle">Control pump stations · Manage valves · Track live water flow</p>
+                </div>
+                <div style="margin-left:auto; display:flex; gap:8px;">
+                    <span class="badge badge-blue" id="pumpStatusBadge"><span class="pulse-dot pulse-green"></span> Pump
+                        Active</span>
+                    <span id="clockDisplay" class="badge"
+                        style="background:var(--bg-card); border:1px solid var(--border-color);">00:00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid-4" style="margin-bottom:24px;">
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-blue);">
+                <div class="stat-icon">💧</div>
+                <div class="stat-value" style="color:var(--accent-blue)" id="totalReleased">12,400</div>
+                <div class="stat-label">Litres Released Today</div>
+            </div>
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-green);">
+                <div class="stat-icon">🚰</div>
+                <div class="stat-value" style="color:var(--accent-green)">3</div>
+                <div class="stat-label">Active Pump Stations</div>
+            </div>
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-cyan);">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-value" style="color:var(--accent-cyan)" id="supplyDuration">3h 15m</div>
+                <div class="stat-label">Supply Duration</div>
+            </div>
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-purple);">
+                <div class="stat-icon">🏘️</div>
+                <div class="stat-value" style="color:var(--accent-purple)">847</div>
+                <div class="stat-label">Homes Served</div>
+            </div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:24px;">
+            <!-- Pump Control -->
+            <div class="pump-toggle-card glass-card" id="pumpSection">
+                <h3 style="font-family:var(--font-display); margin-bottom:20px;">🚰 Main Pump Control</h3>
+                <div style="margin-bottom:20px;">
+                    <button class="pump-btn on" id="pumpBtn" onclick="togglePump()">💧</button>
+                </div>
+                <div style="font-size:1.1rem; font-weight:700; font-family:var(--font-display); color:var(--accent-blue);"
+                    id="pumpLabel">PUMP IS RUNNING</div>
+                <div style="font-size:0.82rem; color:var(--text-muted); margin-top:6px;" id="pumpTime">Started: 6:00 AM
+                    today</div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px;">
+                    <div
+                        style="padding:14px; background:rgba(0,191,255,0.06); border:1px solid rgba(0,191,255,0.2); border-radius:var(--radius-md); text-align:center;">
+                        <div
+                            style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
+                            Flow Rate</div>
+                        <div style="font-family:var(--font-display); font-size:1.6rem; font-weight:800; color:var(--accent-blue);"
+                            id="flowRateDisplay">120</div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">Litres/min</div>
+                    </div>
+                    <div
+                        style="padding:14px; background:rgba(0,191,255,0.06); border:1px solid rgba(0,191,255,0.2); border-radius:var(--radius-md); text-align:center;">
+                        <div
+                            style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
+                            Pressure</div>
+                        <div style="font-family:var(--font-display); font-size:1.6rem; font-weight:800; color:var(--accent-cyan);"
+                            id="pressureDisplay">3.2</div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">Bar</div>
+                    </div>
+                </div>
+
+                <!-- Release log form -->
+                <div style="margin-top:20px; text-align:left;">
+                    <div
+                        style="font-size:0.78rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">
+                        Log Water Release Event</div>
+                    <div class="release-schedule-row" style="margin-bottom:10px;">
+                        <input type="datetime-local" class="form-input" id="releaseTime" style="flex:1;" />
+                        <select class="reason-select" id="releaseType" style="flex:1;">
+                            <option>Morning Supply</option>
+                            <option>Evening Supply</option>
+                            <option>Emergency Release</option>
+                            <option>Scheduled Maintenance Stop</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary w-full" onclick="logRelease()">💧 Log Event</button>
+                </div>
+            </div>
+
+            <!-- Flow Visualization -->
+            <div class="glass-card p-24">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">📊 Live Pipeline Flow</h3>
+                <div class="flow-meter" style="margin-bottom:16px;">
+                    <svg viewBox="0 0 400 200" style="width:100%; height:100%;" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="400" height="200" fill="#071a30" />
+                        <!-- Main pipeline -->
+                        <rect x="20" y="80" width="360" height="40" rx="8" fill="rgba(0,191,255,0.1)" stroke="#00bfff"
+                            stroke-width="1.5" />
+                        <!-- Animated fill -->
+                        <rect x="20" y="80" width="360" height="40" rx="8" fill="rgba(0,191,255,0.08)">
+                            <animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s"
+                                repeatCount="indefinite" />
+                        </rect>
+                        <!-- Water particles -->
+                        <circle r="5" fill="#00fff2" opacity="0.9">
+                            <animateMotion dur="2.5s" repeatCount="indefinite" path="M 20,100 L 380,100" />
+                        </circle>
+                        <circle r="5" fill="#00fff2" opacity="0.7">
+                            <animateMotion dur="2.5s" begin="0.8s" repeatCount="indefinite" path="M 20,100 L 380,100" />
+                        </circle>
+                        <circle r="5" fill="#00fff2" opacity="0.5">
+                            <animateMotion dur="2.5s" begin="1.6s" repeatCount="indefinite" path="M 20,100 L 380,100" />
+                        </circle>
+                        <!-- Source label -->
+                        <text x="20" y="68" fill="#00bfff" font-size="11" font-weight="bold">PUMP STATION</text>
+                        <text x="340" y="68" fill="#00bfff" font-size="11" font-weight="bold">→ CITY</text>
+                        <!-- Flow rate bar at bottom -->
+                        <text x="10" y="160" fill="#8ca8cc" font-size="10">Flow:</text>
+                        <rect x="50" y="150" width="300" height="8" rx="4" fill="rgba(0,191,255,0.1)" />
+                        <rect x="50" y="150" width="216" height="8" rx="4" fill="url(#flowGrad)">
+                            <animate attributeName="width" values="210;230;210" dur="3s" repeatCount="indefinite" />
+                        </rect>
+                        <defs>
+                            <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stop-color="#00bfff" />
+                                <stop offset="100%" stop-color="#00fff2" />
+                            </linearGradient>
+                        </defs>
+                        <text x="360" y="160" fill="#00bfff" font-size="10" id="flowBarLabel">72%</text>
+                        <!-- Pressure gauge -->
+                        <circle cx="200" cy="170" r="18" fill="none" stroke="rgba(0,191,255,0.3)" stroke-width="3" />
+                        <text x="200" y="167" fill="#00bfff" text-anchor="middle" font-size="9"
+                            font-weight="bold">P</text>
+                        <text x="200" y="179" fill="#00fff2" text-anchor="middle" font-size="9">3.2b</text>
+                    </svg>
+                </div>
+
+                <!-- Zone valves -->
+                <h4
+                    style="font-size:0.85rem; color:var(--text-secondary); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px;">
+                    Zone Valve Control</h4>
+                <div class="valve-grid" id="valveSection">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Release Logs -->
+        <div class="glass-card p-24" id="logSection">
+            <h3 style="font-family:var(--font-display); margin-bottom:16px;">📋 Today's Water Release Log</h3>
+            <div id="releaseLog">
+                <div class="log-entry">
+                    <span style="font-size:1.4rem">💧</span>
+                    <div>
+                        <div style="font-weight:600; font-size:0.88rem;">Morning Supply — Started</div>
+                        <div style="font-size:0.78rem; color:var(--text-muted);">6:00 AM · Pump Station 1,2,3 active ·
+                            Flow: 120L/min · Pressure: 3.2 bar</div>
+                    </div>
+                    <span class="badge badge-green" style="margin-left:auto; align-self:flex-start">Active</span>
+                </div>
+                <div class="log-entry">
+                    <span style="font-size:1.4rem">⛔</span>
+                    <div>
+                        <div style="font-weight:600; font-size:0.88rem;">Yesterday Evening — Supply Stopped</div>
+                        <div style="font-size:0.78rem; color:var(--text-muted);">9:00 PM · 3 hour supply window closed ·
+                            Total: 21,600 litres</div>
+                    </div>
+                    <span class="badge badge-red" style="margin-left:auto; align-self:flex-start">Ended</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        initSupabase();
+        const user = requireAuth(['water']);
+
+        let pumpOn = true;
+        let releaseStart = new Date(new Date().setHours(6, 0, 0, 0));
+
+        // Clock
+        setInterval(() => {
+            document.getElementById('clockDisplay').textContent = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            // Update supply duration
+            const diff = Math.floor((new Date() - releaseStart) / 1000);
+            const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60);
+            document.getElementById('supplyDuration').textContent = `${h}h ${m}m`;
+            // Increment litres
+            if (pumpOn) {
+                const liters = Math.floor(h * 60 * 120 + m * 120 + (diff % 60) * 2);
+                document.getElementById('totalReleased').textContent = liters.toLocaleString();
+            }
+        }, 1000);
+
+        // Pump toggle
+        function togglePump() {
+            pumpOn = !pumpOn;
+            const btn = document.getElementById('pumpBtn');
+            const badge = document.getElementById('pumpStatusBadge');
+            const label = document.getElementById('pumpLabel');
+            const pumpTime = document.getElementById('pumpTime');
+
+            if (pumpOn) {
+                btn.className = 'pump-btn on'; btn.textContent = '💧';
+                label.textContent = 'PUMP IS RUNNING'; label.style.color = 'var(--accent-blue)';
+                badge.innerHTML = '<span class="pulse-dot pulse-green"></span> Pump Active';
+                badge.className = 'badge badge-blue';
+                releaseStart = new Date();
+                pumpTime.textContent = 'Started: ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                showToast('💧 Water pump started! Citizens will see water flow live.', 'success');
+                dbUpdate('water_status', { id: 'main' }, { is_flowing: true, started_at: new Date().toISOString(), manager: user?.email });
+                addReleaseLog('💧', 'Water Supply Started', `Pump activated by ${user?.name || 'Manager'}`);
+            } else {
+                btn.className = 'pump-btn off'; btn.textContent = '⛔';
+                label.textContent = 'PUMP IS OFF'; label.style.color = 'var(--accent-red)';
+                badge.innerHTML = '⛔ Pump Stopped';
+                badge.className = 'badge badge-red';
+                pumpTime.textContent = 'Stopped: ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                showToast('⛔ Water pump stopped. Citizens notified.', 'info');
+                dbUpdate('water_status', { id: 'main' }, { is_flowing: false, stopped_at: new Date().toISOString() });
+                addReleaseLog('⛔', 'Water Supply Stopped', `Pump stopped by ${user?.name || 'Manager'}`);
+            }
+        }
+
+        // Valves
+        const valves = [
+            { name: 'Zone A', status: 'open' }, { name: 'Zone B', status: 'open' }, { name: 'Zone C', status: 'open' },
+            { name: 'Zone D', status: 'closed' }, { name: 'Zone E', status: 'open' }, { name: 'Zone F', status: 'open' },
+        ];
+        function renderValves() {
+            document.getElementById('valveSection').innerHTML = valves.map((v, i) => `
+        <div class="valve-card ${v.status}" onclick="toggleValve(${i})">
+          <div class="valve-icon">${v.status === 'open' ? '🟢' : '🔴'}</div>
+          <div class="valve-name">${v.name}</div>
+          <div class="valve-status" style="color:${v.status === 'open' ? 'var(--accent-green)' : 'var(--accent-red)'};">${v.status.toUpperCase()}</div>
+        </div>`).join('');
+        }
+        renderValves();
+
+        function toggleValve(idx) {
+            valves[idx].status = valves[idx].status === 'open' ? 'closed' : 'open';
+            renderValves();
+            showToast(`🔧 ${valves[idx].name} valve ${valves[idx].status}!`, valves[idx].status === 'open' ? 'success' : 'info');
+            dbUpdate('valve_status', { zone: valves[idx].name }, { status: valves[idx].status, updated_by: user?.email });
+        }
+
+        // Log release
+        function logRelease() {
+            const time = document.getElementById('releaseTime').value;
+            const type = document.getElementById('releaseType').value;
+            if (!time) { showToast('Please select a time', 'error'); return; }
+            const isStart = !type.includes('Stop') && !type.includes('Maintenance');
+            addReleaseLog(isStart ? '💧' : '⛔', type, 'Logged by ' + (user?.name || 'Manager') + ' at ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+            dbInsert('water_release_log', { event_time: time, event_type: type, manager: user?.email, timestamp: new Date().toISOString() });
+            showToast('✅ Water event logged!', 'success');
+        }
+
+        function addReleaseLog(icon, title, detail) {
+            const log = document.getElementById('releaseLog');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span style="font-size:1.4rem">${icon}</span><div><div style="font-weight:600; font-size:0.88rem;">${title}</div><div style="font-size:0.78rem; color:var(--text-muted);">${detail}</div></div>`;
+            log.prepend(entry);
+        }
+
+        // Set default release time
+        const now = new Date(); now.setSeconds(0, 0);
+        document.getElementById('releaseTime').value = now.toISOString().slice(0, 16);
+
+        // Flow fluctuation
+        setInterval(() => {
+            const rate = Math.floor(115 + Math.random() * 10);
+            document.getElementById('flowRateDisplay').textContent = rate;
+            const p = (3.0 + Math.random() * 0.4).toFixed(1);
+            document.getElementById('pressureDisplay').textContent = p;
+        }, 4000);
+
+        function showToast(msg, type = 'info') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `<span>${msg}</span>`;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4200);
+        }
+    </script>
+</body>
+
+</html>

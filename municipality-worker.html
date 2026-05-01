@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartCity — Municipality Worker Dashboard</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <style>
+        .location-big {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-cyan);
+            word-break: break-all;
+        }
+
+        .gps-card {
+            padding: 28px;
+            text-align: center;
+            border: 2px solid var(--glass-border);
+            border-radius: var(--radius-xl);
+            background: var(--gradient-glow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gps-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+
+        .gps-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 160px;
+            height: 160px;
+            border: 2px solid rgba(0, 191, 255, 0.2);
+            border-radius: 50%;
+        }
+
+        .gps-ring-2 {
+            width: 220px;
+            height: 220px;
+            border-color: rgba(0, 191, 255, 0.1);
+            animation: radarPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes radarPulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 0.5
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.1);
+                opacity: 0.15
+            }
+        }
+
+        .loc-share-btn {
+            width: 100%;
+            height: 64px;
+            font-size: 1.05rem;
+            border-radius: var(--radius-xl);
+        }
+
+        .area-map {
+            width: 100%;
+            height: 280px;
+            background: linear-gradient(135deg, #07152e, #0d2040);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .schedule-form label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .reason-select {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            padding: 14px 18px;
+            font-family: var(--font-main);
+            font-size: 0.95rem;
+            width: 100%;
+            outline: none;
+        }
+
+        .reason-select:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .reason-select option {
+            background: #07152e;
+        }
+
+        .checkin-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+        }
+
+        .checkin-check {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .checkin-check.done {
+            background: var(--accent-green);
+            border-color: var(--accent-green);
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-animated"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">🏛️</div>
+            <div class="logo-text">Muni<span>Panel</span></div>
+        </div>
+        <div class="nav-section">Worker Panel</div>
+        <a class="nav-item active" href="municipality-worker.html"><span class="nav-icon">📋</span> Dashboard</a>
+        <a class="nav-item" href="#locationSection"
+            onclick="document.getElementById('locationSection').scrollIntoView({behavior:'smooth'})"><span
+                class="nav-icon">📍</span> Share Location</a>
+        <a class="nav-item" href="#scheduleSection"
+            onclick="document.getElementById('scheduleSection').scrollIntoView({behavior:'smooth'})"><span
+                class="nav-icon">📅</span> Set Schedule</a>
+        <div class="nav-section" style="margin-top:auto">Account</div>
+        <button class="nav-item" onclick="signOut()"><span class="nav-icon">🚪</span> Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="font-size:2rem">🏛️</div>
+                <div>
+                    <h1 class="page-title">Municipality Worker Dashboard</h1>
+                    <p class="page-subtitle">Share live GPS · Set cleaning areas · Track today's progress</p>
+                </div>
+                <div style="margin-left:auto;">
+                    <span class="badge badge-green" id="onDutyBadge"><span class="pulse-dot pulse-green"></span> On
+                        Duty</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="grid-4" style="margin-bottom:24px;">
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-green);">
+                <div class="stat-icon">✅</div>
+                <div class="stat-value" style="color:var(--accent-green)" id="completedSectors">2</div>
+                <div class="stat-label">Sectors Done</div>
+            </div>
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-blue);">
+                <div class="stat-icon">🚛</div>
+                <div class="stat-value" style="color:var(--accent-blue)">4</div>
+                <div class="stat-label">Total Today</div>
+            </div>
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-yellow);">
+                <div class="stat-icon">🏠</div>
+                <div class="stat-value" style="color:var(--accent-yellow)" id="housesServed">97</div>
+                <div class="stat-label">Houses Served</div>
+            </div>
+            <div class="glass-card stat-card" style="border-left:3px solid var(--accent-cyan);">
+                <div class="stat-icon">📍</div>
+                <div class="stat-value" style="color:var(--accent-cyan)">GPS</div>
+                <div class="stat-label" id="gpsStatusLabel">Off</div>
+            </div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:24px;">
+            <!-- Location Sharing -->
+            <div class="glass-card p-24" id="locationSection">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">📍 Live Location Sharing</h3>
+                <div style="text-align:center; margin-bottom:20px; position:relative; padding:20px 0;">
+                    <div class="gps-ring"></div>
+                    <div class="gps-ring gps-ring-2" id="radarRing"></div>
+                    <div class="gps-icon" id="gpsIcon">📍</div>
+                    <div class="location-big" id="locationText">Location not shared</div>
+                    <div style="font-size:0.78rem; color:var(--text-muted); margin-top:6px;" id="locationAccuracy">Click
+                        Share to enable GPS</div>
+                </div>
+
+                <button class="btn btn-primary loc-share-btn" id="shareLocBtn" onclick="toggleLocationShare()">
+                    📍 Start Location Sharing
+                </button>
+
+                <div
+                    style="margin-top:14px; padding:12px 16px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); font-size:0.82rem; color:var(--text-muted);">
+                    ℹ️ Your live location will be visible to citizens on the Municipality map. Updated every 10 seconds.
+                </div>
+            </div>
+
+            <!-- Cleaning Area Leaflet Map -->
+            <div class="glass-card p-24">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">🗺️ Your Live Position</h3>
+                <div id="workerMap" style="width:100%; height:280px; border-radius:var(--radius-lg); z-index:0;"></div>
+                <div style="margin-top:8px; font-size:0.75rem; color:var(--text-muted);" id="workerMapStatus">Waiting
+                    for GPS…</div>
+            </div>
+        </div>
+
+        <!-- Schedule Form + Checklist -->
+        <div class="grid-2">
+            <div class="glass-card p-24 schedule-form" id="scheduleSection">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">📋 Set Today's Work Plan</h3>
+                <form onsubmit="saveSchedule(event)" style="display:flex; flex-direction:column; gap:14px;">
+                    <div class="form-group">
+                        <label class="form-label">Shift Start Time</label>
+                        <input type="time" class="form-input" id="shiftStart" value="08:00" required />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Areas to Clean Today</label>
+                        <textarea class="form-input" id="areasInput" rows="3"
+                            placeholder="e.g. Main Road, Park Sector, Market Area…">Sector 1–4, Main Road, Park Junction</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Truck Number</label>
+                        <select class="reason-select" id="truckNum">
+                            <option>GC-01</option>
+                            <option selected>GC-04</option>
+                            <option>GC-07</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Special Notes</label>
+                        <input type="text" class="form-input" id="scheduleNotes"
+                            placeholder="Any roadblocks, extra areas…" />
+                    </div>
+                    <button type="submit" class="btn btn-primary">📅 Publish Schedule</button>
+                </form>
+            </div>
+
+            <div class="glass-card p-24">
+                <h3 style="font-family:var(--font-display); margin-bottom:16px;">✅ Today's Checklist</h3>
+                <div id="checklistItems">
+                    <div class="checkin-item">
+                        <div class="checkin-check done" onclick="toggleCheck(this)">✓</div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 1 — Main Street</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted)">45 houses · Completed 8:00–9:00 AM
+                            </div>
+                        </div>
+                    </div>
+                    <div class="checkin-item">
+                        <div class="checkin-check done" onclick="toggleCheck(this)">✓</div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 2 — Park Road</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted)">52 houses · Completed 9:30–10:45 AM
+                            </div>
+                        </div>
+                    </div>
+                    <div class="checkin-item" style="border-color:rgba(255,214,0,0.3);">
+                        <div class="checkin-check" onclick="toggleCheck(this)"
+                            style="border-color:var(--accent-yellow)"></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 3 — Market Area</div>
+                            <div style="font-size:0.75rem; color:var(--accent-yellow)">In Progress…</div>
+                        </div>
+                    </div>
+                    <div class="checkin-item">
+                        <div class="checkin-check" onclick="toggleCheck(this)"></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Sector 4 — Residential Block</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted)">Pending · ~60 houses</div>
+                        </div>
+                    </div>
+                    <div class="checkin-item">
+                        <div class="checkin-check" onclick="toggleCheck(this)"></div>
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">Park Junction</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted)">Pending · Park + surroundings</div>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    style="margin-top:16px; padding:12px; background:rgba(0,230,118,0.06); border:1px solid rgba(0,230,118,0.2); border-radius:var(--radius-md); text-align:center;">
+                    <div style="font-size:0.8rem; color:var(--text-muted);">Today's Progress</div>
+                    <div style="font-size:1.4rem; font-weight:800; font-family:var(--font-display); color:var(--accent-green);"
+                        id="progressPct">40%</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        initSupabase();
+        const user = requireAuth(['municipality']);
+
+        // Worker's own Leaflet map
+        const workerMap = L.map('workerMap', { center: [11.0168, 76.9558], zoom: 13 });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '' }).addTo(workerMap);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(workerMap);
+        let workerSelfMarker = null;
+        let workerSelfPath = null;
+
+        let locationInterval = null;
+        let isSharing = false;
+
+        function toggleLocationShare() {
+            if (isSharing) {
+                isSharing = false;
+                clearInterval(locationInterval);
+                document.getElementById('shareLocBtn').innerHTML = '📍 Start Location Sharing';
+                document.getElementById('shareLocBtn').classList.remove('btn-ghost');
+                document.getElementById('shareLocBtn').classList.add('btn-primary');
+                document.getElementById('gpsStatusLabel').textContent = 'Off';
+                document.getElementById('locationText').textContent = 'Location sharing paused';
+                showToast('📍 Location sharing stopped', 'info');
+                return;
+            }
+            if (!navigator.geolocation) { showToast('Geolocation not supported', 'error'); return; }
+            navigator.geolocation.getCurrentPosition(pos => {
+                isSharing = true;
+                updateLocation(pos);
+                locationInterval = setInterval(() => {
+                    navigator.geolocation.getCurrentPosition(updateLocation, err => console.warn(err));
+                }, 10000);
+                document.getElementById('shareLocBtn').innerHTML = '🔴 Stop Sharing Location';
+                document.getElementById('shareLocBtn').classList.remove('btn-primary');
+                document.getElementById('shareLocBtn').classList.add('btn-ghost');
+                document.getElementById('gpsStatusLabel').textContent = 'Live';
+                document.getElementById('gpsStatusLabel').style.color = 'var(--accent-green)';
+                showToast('✅ Live location sharing started!', 'success');
+            }, err => showToast('Location access denied: ' + err.message, 'error'));
+        }
+
+        function updateLocation(pos) {
+            const { latitude, longitude, accuracy } = pos.coords;
+            document.getElementById('locationText').textContent = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+            document.getElementById('locationAccuracy').textContent = `Accuracy: ±${Math.round(accuracy)}m`;
+
+            // Update worker's own Leaflet map marker
+            if (!workerMap._leaflet_id) return;
+            if (!workerSelfMarker) {
+                workerSelfMarker = L.marker([latitude, longitude], { icon: L.divIcon({ html: '<div style="font-size:26px;filter:drop-shadow(0 2px 8px rgba(255,214,0,0.8))">🚛</div>', className: '', iconSize: [32, 32], iconAnchor: [16, 16] }) }).addTo(workerMap).bindPopup('<b>🚛 Your Position</b><br>Live GPS');
+                workerSelfPath = L.polyline([[latitude, longitude]], { color: '#ffd600', weight: 3, opacity: 0.7, dashArray: '8,5' }).addTo(workerMap);
+            } else {
+                workerSelfMarker.setLatLng([latitude, longitude]);
+                workerSelfPath.addLatLng([latitude, longitude]);
+            }
+            workerMap.flyTo([latitude, longitude], 15, { animate: true, duration: 1 });
+            document.getElementById('workerMapStatus').textContent = `Live · ${latitude.toFixed(5)}, ${longitude.toFixed(5)} · ±${Math.round(accuracy)}m`;
+
+            // Push to Supabase (upsert by worker email)
+            if (supabaseClient) {
+                supabaseClient.from('worker_location').upsert({ worker: user?.email, lat: latitude, lng: longitude, timestamp: new Date().toISOString(), worker_name: user?.name || 'Worker' }, { onConflict: 'worker' });
+            } else {
+                dbUpdate('worker_location', { worker: user?.email }, { lat: latitude, lng: longitude, timestamp: new Date().toISOString(), worker_name: user?.name });
+            }
+        }
+
+        function saveSchedule(e) {
+            e.preventDefault();
+            const data = {
+                shift_start: document.getElementById('shiftStart').value,
+                areas: document.getElementById('areasInput').value,
+                truck: document.getElementById('truckNum').value,
+                notes: document.getElementById('scheduleNotes').value,
+                date: new Date().toDateString(),
+                worker: user?.email
+            };
+            dbInsert('collection_schedules', data);
+            showToast('✅ Schedule published! Citizens can now see today\'s plan.', 'success');
+        }
+
+        let doneCount = 2;
+        const totalItems = 5;
+        function toggleCheck(el) {
+            el.classList.toggle('done');
+            el.textContent = el.classList.contains('done') ? '✓' : '';
+            doneCount = document.querySelectorAll('.checkin-check.done').length;
+            document.getElementById('completedSectors').textContent = doneCount;
+            document.getElementById('housesServed').textContent = doneCount * 48;
+            document.getElementById('progressPct').textContent = Math.round((doneCount / totalItems) * 100) + '%';
+        }
+
+        function showToast(msg, type = 'info') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `<span>${msg}</span>`;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4200);
+        }
+    </script>
+</body>
+
+</html>
